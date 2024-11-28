@@ -1,0 +1,79 @@
+---
+title: "01 - Differential Expression"
+author: "Jay Nagabhairu"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(here)   # project-root-relative paths (no hardcoded /Users/... paths)
+library(dplyr)
+library(tidyr)
+```
+
+Welch two-sample t-tests per probe for two clinically meaningful transitions in
+bladder cancer progression, with Benjamini-Hochberg FDR correction.
+
+## Load data
+
+```{r load}
+clin_data <- read.csv(here("data", "raw", "BC_ClinData_233rows.csv"),
+                      stringsAsFactors = FALSE)
+
+# The expression matrix is stored gzipped; read.delim reads .gz transparently.
+gene_exp <- read.delim(gzfile(here("data", "raw", "BC_GeneExpData_withAnno_233.tsv.gz")),
+                       stringsAsFactors = FALSE, check.names = FALSE)
+
+dim(gene_exp)   # ~43k probes x 233 samples
+dim(clin_data)
+```
+
+## Helper to run a two-group comparison
+
+```{r helper}
+source(here("R", "fnTTest.R"))
+
+run_ttest_analysis <- function(clinical_data, gene_exp_data,
+                               group1, group2, test_name,
+                               folder_name = here("results", "differential_expression")) {
+
+  clin_subset <- clinical_data %>%
+    filter(PrimaryBladderCancerType %in% c(group1, group2)) %>%
+    select(GSMid, PrimaryBladderCancerType)
+
+  gene_exp_subset <- gene_exp_data[, colnames(gene_exp_data) %in% clin_subset$GSMid]
+
+  base_group <- gene_exp_subset[, clin_subset$PrimaryBladderCancerType == group1]
+  comp_group <- gene_exp_subset[, clin_subset$PrimaryBladderCancerType == group2]
+
+  fnTTest(baseGroup = base_group, compGroup = comp_group,
+          testName = test_name, baseGroupName = group1,
+          compGroupName = group2, folderName = folder_name)
+}
+```
+
+## Comparison 1: pre-cancer field vs superficial (stage 1) tumor
+
+```{r comp1}
+run_ttest_analysis(
+  clinical_data = clin_data, gene_exp_data = gene_exp,
+  group1 = "Bladder mucosae surrounding cancer",
+  group2 = "Primary_BC_Superficial",
+  test_name = "precancer_vs_stage1"
+)
+```
+
+## Comparison 2: superficial (stage 1) vs invasive (stage 2) tumor
+
+```{r comp2}
+run_ttest_analysis(
+  clinical_data = clin_data, gene_exp_data = gene_exp,
+  group1 = "Primary_BC_Superficial",
+  group2 = "Primary_BC_Invasive",
+  test_name = "stage1_vs_stage2"
+)
+
+cat("T-test analysis complete; results written to results/differential_expression/\n")
+```

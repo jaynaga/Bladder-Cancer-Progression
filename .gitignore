@@ -1,0 +1,26 @@
+# R
+.Rhistory
+.RData
+.Rproj.user/
+.Rapp.history
+*.Rproj.bak
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*~
+\#*\#
+.#*
+
+# Office temp lock files
+~$*
+
+# Rendered notebook byproducts (keep the .Rmd source, not the knit output)
+*.html
+!docs/**/*.html
+/analysis/*_files/
+/analysis/*_cache/
+
+# Large / regenerable outputs — uncomment if you prefer a code-only repo
+# results/**/*.gz
+# data/raw/*.gz
