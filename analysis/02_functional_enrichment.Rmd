@@ -1,0 +1,76 @@
+---
+title: "02 - Functional Enrichment (EnrichR)"
+author: "Jay Nagabhairu"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(here)
+library(dplyr)
+library(enrichR)
+library(openxlsx)
+```
+
+Takes the top differentially expressed genes from step 01 and tests them against
+~30 curated gene-set libraries (KEGG, GO BP, Reactome, WikiPathways, BioPlanet,
+MSigDB Hallmark, ...) via the EnrichR API.
+
+## Load step 01 results
+
+```{r load}
+de_dir <- here("results", "differential_expression")
+
+pre_s1_ttest <- read.csv(gzfile(file.path(de_dir, "DE_precancer_vs_stage1_full.csv.gz")),
+                         stringsAsFactors = FALSE)
+s2_s1_ttest  <- read.csv(gzfile(file.path(de_dir, "DE_stage1_vs_stage2_full.csv.gz")),
+                         stringsAsFactors = FALSE)
+```
+
+## Extract gene symbols from "ILMN_xxxxxxx|SYMBOL" feature ids
+
+```{r symbols}
+funcSplit <- function(rep_gene) {
+  parts <- unlist(strsplit(rep_gene, split = "|", fixed = TRUE))
+  parts[2]
+}
+
+pre_s1_ttest$Gene <- vapply(pre_s1_ttest$Feature, funcSplit, character(1))
+s2_s1_ttest$Gene  <- vapply(s2_s1_ttest$Feature,  funcSplit, character(1))
+```
+
+## Take the top 1,000 genes per comparison
+
+```{r top-genes}
+max_genes <- 1000
+
+s1vPre_degs <- pre_s1_ttest %>%
+  filter(!is.na(Pvalue)) %>% arrange(Pvalue) %>%
+  slice(1:max_genes) %>% select(Gene) %>% distinct()
+
+s2vs1_degs <- s2_s1_ttest %>%
+  filter(!is.na(Pvalue)) %>% arrange(Pvalue) %>%
+  slice(1:max_genes) %>% select(Gene) %>% distinct()
+
+enr_dir <- here("results", "enrichment")
+if (!dir.exists(enr_dir)) dir.create(enr_dir, recursive = TRUE)
+write.csv(s1vPre_degs, file.path(enr_dir, "Filtered_DEGs_s1vPre.csv"), row.names = FALSE)
+write.csv(s2vs1_degs,  file.path(enr_dir, "Filtered_DEGs_s2vs1norm.csv"), row.names = FALSE)
+```
+
+## Run enrichment across all libraries
+
+```{r enrichment, eval=FALSE}
+# eval=FALSE by default because it calls the live EnrichR API. Set eval=TRUE to run.
+source(here("R", "functionEnrichment.R"))
+
+dblist <- read.csv(here("data", "EnrichR-Databases-2023.txt"),
+                   header = FALSE, stringsAsFactors = FALSE)
+
+functionEnrichment(dblist, s1vPre_degs,
+                   file.path(enr_dir, "s1vPre_EnrichR.xlsx"))
+functionEnrichment(dblist, s2vs1_degs,
+                   file.path(enr_dir, "s2vs1norm_EnrichR.xlsx"))
+```
