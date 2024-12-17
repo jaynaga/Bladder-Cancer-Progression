@@ -1,0 +1,95 @@
+---
+title: "04 - Immune Trend Visualization"
+author: "Jay Nagabhairu"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(here)
+library(dplyr)
+library(reshape2)
+library(ggplot2)
+```
+
+Tracks average immune-cell fractions (from CIBERSORTx, step 03) across the
+progression axis, and separately by recurrence status within stage 1.
+
+## Load deconvolution results
+
+```{r load}
+dec_dir <- here("results", "deconvolution")
+
+precancer <- read.csv(file.path(dec_dir, "CIBERSORTx_precancer.csv"),
+                      stringsAsFactors = FALSE, check.names = FALSE)
+stage1    <- read.csv(file.path(dec_dir, "CIBERSORTx_stage1_by_recurrence.csv"),
+                      stringsAsFactors = FALSE, check.names = FALSE)
+stage2    <- read.csv(file.path(dec_dir, "CIBERSORTx_stage2_by_recurrence.csv"),
+                      stringsAsFactors = FALSE, check.names = FALSE)
+
+clin <- read.csv(here("data", "raw", "BC_ClinData_233rows.csv"),
+                 stringsAsFactors = FALSE)
+```
+
+## Mean fraction of each of the 22 LM22 subsets for a group
+
+```{r means-fn}
+# Returns a named numeric vector: mean fraction per immune subset.
+# Assumes the first 22 columns after "Mixture" are the LM22 fractions.
+funcMeans <- function(cibersortData) {
+  frac <- cibersortData[, 2:23]          # 22 LM22 columns (col 1 = Mixture id)
+  colMeans(frac, na.rm = TRUE)
+}
+```
+
+## Progression trajectory: pre-cancer -> stage 1 -> stage 2
+
+```{r progression}
+meansProgression <- cbind(
+  `Pre-cancer` = funcMeans(precancer),
+  `Stage 1`    = funcMeans(stage1),
+  `Stage 2`    = funcMeans(stage2)
+)
+meansProgression <- as.data.frame(meansProgression)
+meansProgression$row.names <- rownames(meansProgression)
+
+source(here("R", "functionLineGraph.R"))
+
+fig_dir <- here("docs", "figures")
+progressionPlot <- functionLineGraph(
+  meansProgression,
+  outputFileName   = "immune_progression_trajectory",
+  outputFolderName = fig_dir
+)
+progressionPlot
+```
+
+## Recurrence-stratified: stage 1 relapse vs relapse-free
+
+```{r recurrence}
+# recurrence: 1 = non-relapse (relapse-free), 2 = relapse
+relapseFreeIDs <- clin$GSMid[clin$recurrence == 1]
+relapseIDs     <- clin$GSMid[clin$recurrence == 2]
+
+# Filter by matching the CIBERSORTx "Mixture" id (NOT by row index)
+stage1RelapseFree <- stage1[stage1$Mixture %in% relapseFreeIDs, ]
+stage1Relapse     <- stage1[stage1$Mixture %in% relapseIDs, ]
+
+meansRecurrence <- cbind(
+  `Relapse-free` = funcMeans(stage1RelapseFree),
+  `Relapse`      = funcMeans(stage1Relapse)
+)
+meansRecurrence <- as.data.frame(meansRecurrence)
+meansRecurrence$row.names <- rownames(meansRecurrence)
+
+recurrencePlot <- functionLineGraph(
+  meansRecurrence,
+  outputFileName   = "immune_stage1_by_recurrence",
+  outputFolderName = fig_dir
+)
+recurrencePlot
+```
+
+Figures are written to `docs/figures/` as PNG, PDF, and TIFF.
